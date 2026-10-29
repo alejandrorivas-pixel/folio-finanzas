@@ -1,0 +1,35 @@
+name: Proponer una mejora
+description: Explica una necesidad y un cambio concreto.
+title: "[Mejora] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Las propuestas son bienvenidas; no hay un calendario de implementación garantizado.
+        Usa ejemplos ficticios: este espacio es público y no debe contener documentos financieros reales, datos personales ni secretos.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qué problema quieres resolver
+      description: Describe la tarea y qué te impide hacerla hoy.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Cambio propuesto
+      description: Un ejemplo ficticio del antes y después ayuda a delimitar el alcance.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas o contexto adicional
+      description: Opcional. Puedes indicar si te interesa contribuir a la implementación.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Antes de publicar
+      options:
+        - label: Revisé que la propuesta y los adjuntos no contienen datos financieros reales, datos personales ni secretos.
+          required: true

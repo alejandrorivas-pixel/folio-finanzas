@@ -1,0 +1,45 @@
+name: Reportar un fallo
+description: Un problema reproducible con datos ficticios.
+title: "[Fallo] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por ayudar a mejorar Folio. Este reporte es público.
+        No adjuntes documentos financieros reales, bases personales, claves ni logs con secretos.
+        Para vulnerabilidades, usa el [canal privado de seguridad](https://github.com/alejandrorivas-pixel/folio-finanzas/security/advisories/new).
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pasos para reproducir
+      description: Usa el modo demo o un ejemplo mínimo creado desde cero con datos ficticios.
+      placeholder: "1. Abrí la app en modo demo…"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Qué esperabas que ocurriera
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Qué ocurrió
+      description: Incluye el mensaje de error y, si ayuda, una captura sin datos personales.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Entorno
+      description: Commit o versión, sistema operativo, navegador y versiones de Python y Node cuando correspondan. Indica si usabas demo, modo real o MCP, sin compartir tus datos.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Antes de publicar
+      options:
+        - label: Revisé que el reporte y los adjuntos no contienen datos financieros reales, datos personales ni secretos.
+          required: true

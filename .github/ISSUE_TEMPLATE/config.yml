@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Reportar una vulnerabilidad en privado
+    url: https://github.com/alejandrorivas-pixel/folio-finanzas/security/advisories/new
+    about: No publiques detalles de seguridad en un issue abierto. Usa datos ficticios y no incluyas secretos.

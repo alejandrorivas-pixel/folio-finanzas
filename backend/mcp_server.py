@@ -43,7 +43,7 @@ pueden abreviarse y las listas extensas llevan contadores de truncamiento.
 server = MCPServer(
     "folio",
     title="Folio · Finanzas locales",
-    version="1.0.0",
+    version="0.1.0",
     instructions=GUIDE,
     log_level="WARNING",
 )

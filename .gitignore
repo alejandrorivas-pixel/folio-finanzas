@@ -10,3 +10,17 @@ __pycache__/
 .pytest_cache/
 *.pyc
 *.log
+.DS_Store
+# Local ledgers, financial documents and credentials must stay out of Git.
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.xlsx
+*.xls
+*.csv
+*.pdf
+*.pem
+*.key
+backups/
+uploads/

@@ -1,6 +1,25 @@
 # Folio · Finanzas con agentes de IA
 
-Base del hackathon: React + TypeScript + Vite en frontend; FastAPI + SQLite en backend. Dos agentes: consulta financiera y preparación de movimientos. Toda incorporación al libro requiere confirmación explícita.
+Una app local para registrar los movimientos de un negocio, revisar importaciones y consultar sus números con agentes de IA. Los agentes preparan propuestas; tú revisas y confirmas antes de cambiar el libro.
+
+Creada por [alejandrorivas-pixel](https://github.com/alejandrorivas-pixel) como proyecto individual durante un hackathon de Codex. Se comparte como open source para que otras personas puedan usarla, adaptarla y aportar mejoras.
+
+[Licencia MIT](LICENSE) · [Cómo contribuir](CONTRIBUTING.md) · [Seguridad](SECURITY.md) · [Conectar agentes por MCP](MCP_GUIDE.md)
+
+## Empezar
+
+Necesitas Git, Python 3.11+ y Node 20+ en macOS o Linux; en Windows puedes usar WSL.
+
+```sh
+git clone https://github.com/alejandrorivas-pixel/folio-finanzas.git
+cd folio-finanzas
+./scripts/setup.sh
+./start.sh
+```
+
+Abre **http://127.0.0.1:8000**. Empiezas con una empresa y movimientos ficticios; puedes explorar el dashboard, preparar un movimiento y confirmarlo **sin una API key**. La IA real es opcional y requiere configurar tu propia conexión.
+
+React + TypeScript + Vite en frontend; FastAPI + SQLite en backend. Proyecto experimental para uso local de una persona: no incluye autenticación multiusuario ni está preparado para exponerse directamente a Internet. La licencia pública del código no publica tus bases de datos locales.
 
 ## Para quien hará UI/UX: empezar aquí
 
@@ -104,11 +123,23 @@ Los agentes no tienen herramientas para confirmar ni para ejecutar SQL arbitrari
 
 Las pruebas usan archivos sintéticos y respuestas controladas de OpenAI. No sustituyen una comprobación con una clave activa: la conexión real de extracción, transcripción y agentes todavía debe verificarse en el entorno donde se configure la clave.
 
-## Equipo
+## Contribuir y conservar tu trabajo
 
-1. UI/UX: frontend y accesibilidad.
-2. Backend: libro, API y cálculos.
-3. Agentes: interpretación y consulta con respaldo.
-4. Importación: adaptador Excel, pruebas e integración.
+Se agradecen reportes reproducibles, mejoras de accesibilidad, adaptadores de Excel con ejemplos ficticios y pruebas del libro. Consulta [CONTRIBUTING.md](CONTRIBUTING.md). Las incidencias y los pull requests deben incluir únicamente datos inventados. El mantenimiento es comunitario y no tiene un plazo de respuesta garantizado.
+
+Para comprobar un cambio, después de instalar las dependencias:
+
+```sh
+.venv/bin/python -m pytest -q
+npm --prefix frontend run build
+```
+
+GitHub Actions ejecuta estas comprobaciones en cada push a `main` y en los pull requests. Las pruebas usan datos sintéticos y no necesitan secretos ni llamadas reales a OpenAI.
+
+El código se conserva en Git; tus registros quedan en `data/`, excluido del repositorio. Para respaldarlos, detén la app antes de copiar esa carpeta a una ubicación privada. No publiques esa copia en issues, pull requests ni releases.
+
+## Licencia y autoría
+
+Copyright © 2026 [alejandrorivas-pixel](https://github.com/alejandrorivas-pixel). Distribuido bajo [MIT](LICENSE): puedes usar, modificar y redistribuir el código conservando el aviso de licencia. Las dependencias conservan sus respectivas licencias.
 
 Desarrollo desde cero; no contiene código de Cuadra. No subir estados de cuenta, libros reales, bases locales ni secretos a este repositorio.

@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Backend y frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FOLIO_DEMO: "1"
+      OPENAI_API_KEY: ""
+      PYTHON_DOTENV_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar y compilar desde cero
+        run: ./scripts/setup.sh
+      - name: Verificar libro, API y MCP con datos ficticios
+        run: .venv/bin/python -m pytest -q
+      - name: Compilar modo de diseño
+        run: npm --prefix frontend run build:demo
