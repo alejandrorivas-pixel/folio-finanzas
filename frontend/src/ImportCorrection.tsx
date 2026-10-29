@@ -15,6 +15,7 @@ export default function ImportCorrection({
   onCancel: () => void;
 }) {
   const draft = error.draft!;
+  const isDocument = !!proposal.payload.document;
   const [form, setForm] = useState({
     ...draft,
     amount:
@@ -63,7 +64,9 @@ export default function ImportCorrection({
     >
       <div className="panel-heading">
         <div>
-          <h3>Revisar fila {error.row}</h3>
+          <h3>
+            Revisar {isDocument ? "registro" : "fila"} {error.row}
+          </h3>
           <p>
             {error.sheet} · {error.message}
           </p>
@@ -79,7 +82,7 @@ export default function ImportCorrection({
       </div>
       <div className="notice">
         La corrección se aplica solo a esta propuesta y conserva el origen y el
-        motivo. El Excel original permanece intacto.
+        motivo. El archivo original permanece intacto.
       </div>
       <div className="form-grid">
         <label>
@@ -106,6 +109,32 @@ export default function ImportCorrection({
           </select>
         </label>
       </div>
+      {isDocument && (
+        <p className="warning-text">
+          Confirma que el importe está expresado en MXN. Verifica la moneda y
+          los datos contra el documento original antes de guardar la corrección.
+        </p>
+      )}
+      {isDocument && (
+        <div className="form-grid">
+          <label>
+            Referencia / proveedor
+            <input
+              value={form.reference || ""}
+              onChange={(e) => update("reference", e.target.value)}
+              maxLength={300}
+            />
+          </label>
+          <label>
+            Folio de propiedad
+            <input
+              value={form.property || ""}
+              onChange={(e) => update("property", e.target.value)}
+              maxLength={100}
+            />
+          </label>
+        </div>
+      )}
       <label>
         Descripción
         <input

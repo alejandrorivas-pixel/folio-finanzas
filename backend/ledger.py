@@ -312,6 +312,12 @@ def correct_import(pid, sheet, row_number, data, reason):
             raise ValueError("Solo se corrigen importaciones pendientes")
         payload = json.loads(row["payload"])
         original = next((e for e in payload["errors"] if e["sheet"] == sheet and e["row"] == row_number), None)
+        extracted = None
+        if original is None and payload.get("document"):
+            extracted = next((m for m in payload["movements"] if m.get("source_sheet") == sheet and m.get("source_row") == row_number), None)
+            if extracted:
+                original = {"sheet": sheet, "row": row_number, "message": "Edición de lectura asistida por IA",
+                    "draft": {**extracted, "amount_minor": abs(extracted["amount_minor"])}}
         if not original:
             raise ValueError("La fila ya fue corregida o no tiene errores")
         if original.get("draft", {}).get("account") != data["account"]:
@@ -319,6 +325,8 @@ def correct_import(pid, sheet, row_number, data, reason):
         movement = validate_manual(data, payload["categories"] + ["Por revisar"])
         movement.update(source_file=payload["filename"], source_sheet=sheet, source_row=row_number,
             source_hash=payload["file_hash"])
+        if extracted is not None:
+            payload["movements"] = [m for m in payload["movements"] if m is not extracted]
         payload["movements"].append(movement)
         payload["errors"] = [e for e in payload["errors"] if e is not original]
         payload.setdefault("corrections", []).append({"sheet": sheet, "row": row_number, "before": original,

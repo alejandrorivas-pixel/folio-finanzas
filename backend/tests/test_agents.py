@@ -15,7 +15,7 @@ def test_capture_agent_requires_review_before_posting(monkeypatch):
     async def run(agent, text, **kwargs):
         assert agent.name == "Agente de captura"
         return SimpleNamespace(final_output=ai.CaptureDraft(date="2026-10-28", account="efectivo", kind="egreso",
-            category="Nómina y sueldos", description="Pago ficticio", amount_pesos="1500.50", reference=None, property=None, question=None))
+            category="Nómina y sueldos", description="Pago ficticio", amount_pesos="1500.50", reference=None, property=None, question=None, currency="MXN"))
 
     monkeypatch.setattr(ai.Runner, "run", run)
     result = asyncio.run(ai.capture("Hoy pagué 1500.50 de nómina en efectivo"))
@@ -29,7 +29,7 @@ def test_capture_agent_asks_for_missing_amount_without_inventing(monkeypatch):
 
     async def run(*args, **kwargs):
         return SimpleNamespace(final_output=ai.CaptureDraft(date="2026-10-28", account="efectivo", kind="egreso",
-            category="Nómina y sueldos", description="Pago ficticio", amount_pesos=None, reference=None, property=None, question="¿Qué importe pagaste?"))
+            category="Nómina y sueldos", description="Pago ficticio", amount_pesos=None, reference=None, property=None, question="¿Qué importe pagaste?", currency="MXN"))
 
     monkeypatch.setattr(ai.Runner, "run", run)
     result = asyncio.run(ai.capture("Pagué nómina"))

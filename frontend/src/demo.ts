@@ -215,6 +215,8 @@ export async function demoRequest(
       count: rows.length,
       pending: proposals.length,
       local_workbook_available: true,
+      demo_mode: true,
+      company_name: "Empresa Demo",
     };
   if (url.pathname === "/api/proposals" && !options.method)
     return proposals.filter((p) => p.status === "pending");
@@ -306,6 +308,92 @@ export async function demoRequest(
     proposals.unshift(p);
     return p;
   }
+  if (
+    url.pathname === "/api/imports/document-preview" ||
+    url.pathname === "/api/audio/transcribe"
+  ) {
+    throw new Error(
+      "El modo diseño solo usa ejemplos ficticios. No lee documentos ni transcribe audio real.",
+    );
+  }
+  if (url.pathname === "/api/imports/document-demo") {
+    const body = JSON.parse(options.body as string);
+    const account = accounts.some((a) => a.id === body.account)
+      ? body.account
+      : "banco";
+    const filename =
+      body.format === "pdf"
+        ? "estado-demo-ficticio.pdf"
+        : "comprobante-demo-ficticio.png";
+    const movements: Movement[] = [
+      {
+        date: "2026-10-28",
+        account,
+        kind: account === "tarjeta_bbva" ? "cargo" : "egreso",
+        category: "Tecnología y software",
+        description: "Licencia ficticia · Proveedor Demo",
+        amount_minor: -79000,
+        currency: "MXN",
+        reference: "DOC-DEMO-001",
+        treatment: "operational",
+      },
+      {
+        date: "2026-10-28",
+        account,
+        kind: account === "tarjeta_bbva" ? "cargo" : "egreso",
+        category: "Gasolina",
+        description: "Combustible ficticio · Proveedor Demo",
+        amount_minor: -35000,
+        currency: "MXN",
+        reference: "DOC-DEMO-002",
+        treatment: "operational",
+      },
+    ].map((movement, i) => ({
+      ...movement,
+      source_file: filename,
+      source_sheet: body.format === "pdf" ? "Página 1" : "Imagen 1",
+      source_row: i + 4,
+      duplicate: rows.some(
+        (r) =>
+          r.source_file === filename &&
+          r.reference === movement.reference &&
+          r.account === account,
+      ),
+    }));
+    const duplicates = movements.filter((m) => m.duplicate).length;
+    const p: Proposal = {
+      id: crypto.randomUUID(),
+      kind: "import",
+      status: "pending",
+      created_at: new Date().toISOString(),
+      payload: {
+        filename,
+        movements,
+        errors: [],
+        openings: [],
+        categories,
+        document: {
+          mime: body.format === "pdf" ? "application/pdf" : "image/png",
+          pages: 1,
+          account,
+          model: "Simulado",
+        },
+        stats: {
+          total: movements.length,
+          new: movements.length - duplicates,
+          duplicates,
+          errors: 0,
+          review: 0,
+          accounts: { [account]: movements.length },
+        },
+        notes: [
+          "Demostración: lectura simulada de un documento ficticio. No se abrió ningún archivo ni se usó OpenAI.",
+        ],
+      },
+    };
+    proposals.unshift(p);
+    return p;
+  }
   if (url.pathname === "/api/proposals/manual") {
     const f = JSON.parse(options.body as string);
     const negative = ["egreso", "cargo", "interes", "comision"].includes(
@@ -337,14 +425,40 @@ export async function demoRequest(
     const id = url.pathname.split("/")[3];
     const p = proposals.find((p) => p.id === id);
     if (!p) throw new Error("Propuesta de ejemplo no encontrada");
+    if (url.pathname.endsWith("/corrections")) {
+      if (p.status !== "pending" || !p.payload.document)
+        throw new Error("Solo puedes editar documentos pendientes.");
+      const body = JSON.parse(options.body as string);
+      const row = p.payload.movements.find(
+        (m) => m.source_sheet === body.sheet && m.source_row === body.row,
+      );
+      if (!row) throw new Error("Registro no encontrado.");
+      const negative = ["egreso", "cargo", "interes", "comision"].includes(
+        body.movement.kind,
+      );
+      Object.assign(row, body.movement, {
+        amount_minor: negative
+          ? -body.movement.amount_minor
+          : body.movement.amount_minor,
+      });
+      p.payload.corrections = [
+        ...(p.payload.corrections || []),
+        { sheet: body.sheet, row: body.row, reason: body.reason },
+      ];
+      return structuredClone(p);
+    }
     if (url.pathname.endsWith("/confirm")) {
       if (p.status === "confirmed") return { inserted: 0, duplicates: 0 };
+      const fresh = p.payload.movements.filter((r) => !r.duplicate);
       rows = [
-        ...p.payload.movements.map((r) => ({ ...r, id: crypto.randomUUID() })),
+        ...fresh.map((r) => ({ ...r, id: crypto.randomUUID() })),
         ...rows,
       ];
       p.status = "confirmed";
-      return { inserted: p.payload.movements.length, duplicates: 0 };
+      return {
+        inserted: fresh.length,
+        duplicates: p.payload.movements.length - fresh.length,
+      };
     }
     if (url.pathname.endsWith("/reject")) {
       p.status = "rejected";

@@ -33,3 +33,31 @@ def seed():
     refresh_preview(data)
     p = ledger.add_proposal("demo_seed", data)
     ledger.confirm_proposal(p["id"])
+
+
+def document_payload(format: str, account: str):
+    """A labeled UI example, not a claim of having parsed an uploaded document."""
+    if format not in {"pdf", "image"} or account not in {a["id"] for a in ledger.ACCOUNTS}:
+        raise ValueError("Ejemplo o cuenta inválidos")
+    filename = "estado-demo-ficticio.pdf" if format == "pdf" else "recibo-demo-ficticio.png"
+    source = f"ejemplo-documento-v1:{format}:{account}".encode()
+    digest = hashlib.sha256(source).hexdigest()
+    examples = [
+        ("Materiales ficticios de Proveedor Demo", 35000, "Pago a proveedores", "DOC-DEMO-001"),
+        ("Nómina ficticia de Equipo Demo", 420000, "Nómina y sueldos", "DOC-DEMO-002"),
+    ][:2 if format == "pdf" else 1]
+    movements = []
+    for i, (description, amount, category, reference) in enumerate(examples, 4):
+        movement = ledger.validate_manual({"date": "2026-10-28", "account": account,
+            "kind": "cargo" if account == "tarjeta_bbva" else "egreso",
+            "category": category, "description": description, "amount_minor": amount,
+            "reference": reference, "property": "DEMO-001"})
+        movement.update(source_file=filename, source_sheet="Página 1", source_row=i, source_hash=digest)
+        movements.append(movement)
+    return refresh_preview({"filename": filename, "file_hash": digest, "movements": movements,
+        "categories": ledger.metadata()["categories"], "openings": [], "errors": [], "corrections": [],
+        "document": {"mime": "application/pdf" if format == "pdf" else "image/png", "pages": 1,
+            "account": account, "model": "ejemplo-simulado", "warnings": [], "extracted_rows": [], "simulated": True},
+        "notes": ["Ejemplo ficticio y simulado: no se leyó ningún PDF o imagen ni se llamó a OpenAI.",
+                  "Todos los conceptos, importes y referencias fueron inventados para la demo.",
+                  "Revisa o edita los movimientos antes de confirmar. Importado no significa conciliado."]})

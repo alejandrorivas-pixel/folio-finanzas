@@ -3,15 +3,18 @@ from pathlib import Path
 import asyncio
 import io
 import os
+import hashlib
+import json
+import copy
 from typing import Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, StrictInt
+from pydantic import BaseModel, Field, StrictInt, StrictBool, field_validator
 
 from . import ledger
 from .importer import parse_workbook
@@ -35,7 +38,14 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http
 
 
 class Confirmation(BaseModel):
-    confirm: Literal[True]
+    confirm: StrictBool
+
+    @field_validator("confirm")
+    @classmethod
+    def explicit_confirmation(cls, value):
+        if value is not True:
+            raise ValueError("Se requiere confirmación explícita")
+        return value
 
 
 class Manual(BaseModel):
@@ -62,6 +72,28 @@ class ImportCorrection(BaseModel):
     row: int = Field(gt=3)
     movement: Manual
     reason: str = Field(min_length=1, max_length=1000)
+
+
+class DocumentDemo(BaseModel):
+    format: Literal["pdf", "image"]
+    account: Literal["efectivo", "banco", "tarjeta_bbva"]
+
+
+async def provider_result(operation, timeout=75):
+    """Expose useful errors without provider payloads, keys or uploaded content."""
+    try:
+        return await asyncio.wait_for(operation, timeout=timeout)
+    except ValueError:
+        raise
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "La lectura tardó demasiado. Prueba con un archivo o dictado más corto.")
+    except Exception as exc:
+        code = getattr(exc, "status_code", None)
+        if code in (401, 403):
+            raise HTTPException(502, "OpenAI rechazó la conexión. Revisa la clave y los permisos del proyecto.")
+        if code == 429:
+            raise HTTPException(429, "OpenAI indicó un límite de uso o saldo insuficiente. Revisa tu proyecto antes de reintentar.")
+        raise HTTPException(502, "No se pudo completar la lectura con IA. Revisa el formato e intenta de nuevo; no se guardó ningún movimiento.")
 
 
 @app.exception_handler(ValueError)
@@ -126,6 +158,61 @@ def local_preview():
         raise KeyError("Selecciona explícitamente el archivo XLSX que quieras importar")
     from .demo_data import payload
     return ledger.add_proposal("import", payload())
+
+
+# Serialize document extraction so a double click cannot create differently
+# interpreted copies of the same file. This local app runs one worker.
+document_lock = asyncio.Lock()
+
+
+@app.post("/api/imports/document-preview")
+async def document_preview(file: UploadFile = File(...), account: str = Form(...)):
+    from .documents import MAX_BYTES, extract_document, validate_document
+    from .importer import refresh_preview
+    try:
+        if ledger.demo_mode():
+            raise ValueError("La demostración solo utiliza documentos ficticios. Usa los ejemplos PDF o captura.")
+        if account not in {a["id"] for a in ledger.ACCOUNTS}:
+            raise ValueError("Selecciona la cuenta a la que pertenece el documento")
+        content = await file.read(MAX_BYTES + 1)
+        document = await asyncio.to_thread(validate_document, content, file.filename or "")
+        digest = hashlib.sha256(content).hexdigest()
+        async with document_lock:
+            # Reuse the reviewed extraction for identical bytes/account, including
+            # confirmed imports, rather than asking the model to interpret again.
+            with ledger.connection() as con:
+                cached = con.execute("SELECT id,status,payload FROM proposals WHERE kind='import' AND status!='rejected' ORDER BY created_at DESC").fetchall()
+            for row in cached:
+                payload = json.loads(row["payload"])
+                if payload.get("document", {}).get("account") == account and payload.get("file_hash") == digest:
+                    if row["status"] == "pending":
+                        return ledger.get_proposal(row["id"])
+                    payload = refresh_preview(copy.deepcopy(payload))
+                    return ledger.add_proposal("import", payload)
+            payload = await provider_result(extract_document(content, document["filename"], account))
+            return ledger.add_proposal("import", payload)
+    finally:
+        await file.close()
+
+
+@app.post("/api/imports/document-demo")
+def document_demo(body: DocumentDemo):
+    if not ledger.demo_mode():
+        raise ValueError("Los ejemplos ficticios solo están disponibles en modo demo")
+    from .demo_data import document_payload
+    return ledger.add_proposal("import", document_payload(body.format, body.account))
+
+
+@app.post("/api/audio/transcribe")
+async def audio_transcribe(file: UploadFile = File(...)):
+    from .audio import MAX_AUDIO_BYTES, transcribe
+    try:
+        if ledger.demo_mode():
+            raise ValueError("La demostración solo utiliza el dictado ficticio de ejemplo; no envía grabaciones")
+        content = await file.read(MAX_AUDIO_BYTES + 1)
+        return await provider_result(transcribe(content, file.filename or ""))
+    finally:
+        await file.close()
 
 
 @app.get("/api/proposals")

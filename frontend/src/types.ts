@@ -62,6 +62,7 @@ export type Proposal = {
     corrections?: { sheet: string; row: number; reason: string }[];
     notes: string[];
     filename?: string;
+    document?: { mime: string; pages: number; account: string; model: string };
     openings: { account: string; amount_minor: number; source: string }[];
   };
 };
@@ -72,6 +73,8 @@ export type Meta = {
   count: number;
   pending: number;
   local_workbook_available: boolean;
+  demo_mode: boolean;
+  company_name: string;
 };
 export type ImportError = {
   sheet: string;

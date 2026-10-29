@@ -108,6 +108,116 @@ small {
   white-space: nowrap;
   border: 0;
 }
+.intake-formats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 6px 0 20px;
+}
+.intake-formats button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 12px 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.intake-formats button.active {
+  color: var(--green);
+  background: #edf6f0;
+  border-color: #89b7a1;
+}
+.intake-account {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 18px;
+}
+.intake-account select {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #dce6e0;
+  border-radius: 8px;
+  color: inherit;
+}
+.intake-account small {
+  color: #77877d;
+  font-weight: 400;
+}
+.import-intake .intake-disclosure {
+  margin-bottom: 18px;
+}
+.intake-footnote {
+  color: #77877d;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 15px 0 5px;
+}
+.chat-composer .voice-capture {
+  display: block;
+  padding: 7px 0 12px;
+  border-bottom: 1px solid #e6ede8;
+  margin-bottom: 10px;
+}
+.voice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.voice-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  background: #f0f6f2;
+  color: #366b50;
+  border: 1px solid #dce9df;
+}
+.voice-button:hover:not(:disabled) {
+  background: #e3f0e7;
+}
+.voice-hint,
+.voice-notice,
+.voice-error {
+  font-size: 10px;
+  line-height: 1.5;
+  margin-top: 7px;
+  color: #7b877f;
+}
+.voice-notice {
+  color: #376d50;
+}
+.voice-error {
+  color: #a44838;
+}
+.voice-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  margin-right: 3px;
+}
+.recording-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cf5849;
+}
+@media (max-width: 500px) {
+  .intake-formats button {
+    flex-direction: column;
+    font-size: 11px;
+    gap: 6px;
+  }
+}
 .full-width {
   width: 100%;
   justify-content: center;
@@ -1229,20 +1339,20 @@ tbody tr:hover {
 .chat-composer textarea:focus {
   outline: none;
 }
-.chat-composer > div {
+.chat-composer > .composer-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-top: 8px;
 }
-.chat-composer > div > span {
+.chat-composer > .composer-footer > span {
   font-size: 7px;
   color: #a9b6a1;
   display: flex;
   align-items: center;
   gap: 4px;
 }
-.chat-composer > div > button {
+.chat-composer > .composer-footer > button {
   height: 27px;
   width: 27px;
   border-radius: 6px;

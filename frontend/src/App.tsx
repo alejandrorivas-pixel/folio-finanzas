@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import ImportCorrection from "./ImportCorrection";
+import ImportIntake from "./ImportIntake";
+import VoiceCapture from "./VoiceCapture";
 import type { ImportError } from "./types";
 import {
   ArrowDownLeft,
@@ -27,6 +29,7 @@ import {
   ListFilter,
   LoaderCircle,
   MoreHorizontal,
+  Pencil,
   Plus,
   Search,
   ShieldCheck,
@@ -114,10 +117,12 @@ function MovementTable({
   rows,
   onSelect,
   compact = false,
+  onEdit,
 }: {
   rows: Movement[];
   onSelect: (r: Movement) => void;
   compact?: boolean;
+  onEdit?: (r: Movement) => void;
 }) {
   return (
     <div className="table-scroll">
@@ -130,6 +135,7 @@ function MovementTable({
             <th>Fecha</th>
             <th className="right">Importe</th>
             <th className="sr-only">Ver detalle</th>
+            {onEdit && <th className="sr-only">Editar propuesta</th>}
           </tr>
         </thead>
         <tbody>
@@ -177,6 +183,18 @@ function MovementTable({
                   <ChevronRight size={16} />
                 </button>
               </td>
+              {onEdit && (
+                <td>
+                  <button
+                    className="icon-button"
+                    onClick={() => onEdit(r)}
+                    aria-label={`Editar ${r.description}`}
+                    title="Editar antes de confirmar"
+                  >
+                    <Pencil size={16} />
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -249,6 +267,22 @@ function ProposalModal({
   const [correction, setCorrection] = useState<ImportError | null>(null);
   const p = current.payload,
     stats = p.stats;
+  const editMovement = (movement: Movement) =>
+    setCorrection({
+      sheet: movement.source_sheet!,
+      row: movement.source_row!,
+      message: "Revisa los datos extraídos antes de confirmar.",
+      draft: {
+        date: movement.date,
+        account: movement.account,
+        kind: movement.kind,
+        category: movement.category,
+        description: movement.description,
+        amount_minor: Math.abs(movement.amount_minor),
+        reference: movement.reference ?? null,
+        property: movement.property ?? null,
+      },
+    });
   const confirm = async () => {
     setBusy(true);
     setError("");
@@ -333,14 +367,14 @@ function ProposalModal({
           <strong>Revisa estas filas antes de confirmar.</strong>
           {p.errors.slice(0, 12).map((e, i) => (
             <p key={i}>
-              {e.sheet}, fila {e.row}: {e.message}
+              {e.sheet}, {p.document ? "registro" : "fila"} {e.row}: {e.message}
               {e.draft && (
                 <button
                   className="button secondary small-button"
                   style={{ marginLeft: 10 }}
                   onClick={() => setCorrection(e)}
                 >
-                  Revisar fila
+                  Revisar {p.document ? "registro" : "fila"}
                 </button>
               )}
             </p>
@@ -379,7 +413,17 @@ function ProposalModal({
           del resultado operativo hasta clasificarlos.
         </p>
       )}
-      <MovementTable rows={p.movements.slice(0, limit)} onSelect={onDetail} />
+      {p.document && (
+        <p className="intake-footnote">
+          Verifica cada registro contra el documento. Usa el lápiz para corregir
+          fechas, importes o categorías antes de confirmar.
+        </p>
+      )}
+      <MovementTable
+        rows={p.movements.slice(0, limit)}
+        onSelect={onDetail}
+        onEdit={p.document ? editMovement : undefined}
+      />
       {p.movements.length > limit && (
         <button
           className="text-button show-more"
@@ -401,7 +445,9 @@ function ProposalModal({
         <button
           className="button primary"
           onClick={confirm}
-          disabled={busy || p.errors.length > 0 || !p.movements.length}
+          disabled={
+            busy || !!correction || p.errors.length > 0 || !p.movements.length
+          }
         >
           {busy ? (
             <LoaderCircle size={17} className="spin" />
@@ -612,6 +658,8 @@ function AgentPanel({
   const [messages, setMessages] = useState<ChatMessage[]>([]),
     [input, setInput] = useState(""),
     [busy, setBusy] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (messages.length || busy) {
@@ -620,7 +668,7 @@ function AgentPanel({
     }
   }, [messages, busy]);
   const send = async (text = input) => {
-    if (!text.trim() || busy) return;
+    if (!text.trim() || busy || voiceActive) return;
     const history = messages
       .filter((m) => m.mode === mode)
       .slice(-8)
@@ -800,6 +848,7 @@ function AgentPanel({
         }}
       >
         <textarea
+          ref={inputRef}
           aria-label="Mensaje al agente"
           value={input}
           maxLength={3000}
@@ -817,7 +866,20 @@ function AgentPanel({
             }
           }}
         />
-        <div>
+        <VoiceCapture
+          demoMode={health?.demo_mode !== false}
+          aiConfigured={!!health?.ai_configured}
+          disabled={busy || !health}
+          onActive={setVoiceActive}
+          onText={(text) => {
+            setMode("capture");
+            setInput((current) =>
+              [current.trim(), text].filter(Boolean).join("\n"),
+            );
+            inputRef.current?.focus();
+          }}
+        />
+        <div className="composer-footer">
           <span>
             <ShieldCheck size={12} />
             Tú confirmas los cambios
@@ -825,7 +887,7 @@ function AgentPanel({
           <button
             type="submit"
             aria-label="Enviar mensaje"
-            disabled={busy || !input.trim()}
+            disabled={busy || voiceActive || !input.trim()}
           >
             <ArrowUp size={17} />
           </button>
@@ -862,7 +924,6 @@ export default function App() {
     [help, setHelp] = useState(false),
     [importOpen, setImportOpen] = useState(false);
   const [evidence, setEvidence] = useState<Evidence | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
   useEffect(() => {
     let active = true;
@@ -936,44 +997,6 @@ export default function App() {
     const t = setTimeout(() => setToast(""), 5000);
     return () => clearTimeout(t);
   }, [toast]);
-  const upload = async (file?: File) => {
-    if (!file) return;
-    setBusy(true);
-    setError("");
-    try {
-      const data = new FormData();
-      data.append("file", file);
-      const p = await api<Proposal>("/api/imports/preview", {
-        method: "POST",
-        body: data,
-      });
-      setImportOpen(false);
-      setProposal(p);
-      refresh();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-      if (fileInput.current) fileInput.current.value = "";
-    }
-  };
-  const localImport = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const p = await api<Proposal>("/api/imports/local-preview", {
-        method: "POST",
-        body: "{}",
-      });
-      setImportOpen(false);
-      setProposal(p);
-      refresh();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
   const done = (message: string) => {
     setProposal(null);
     setToast(message);
@@ -1145,7 +1168,7 @@ export default function App() {
                 ) : (
                   <Upload size={17} />
                 )}
-                Importar Excel
+                Importar movimientos
               </button>
             </div>
           </div>
@@ -1473,7 +1496,7 @@ export default function App() {
                           className="button secondary"
                           onClick={() => setImportOpen(true)}
                         >
-                          Importar mi Excel
+                          Importar movimientos
                           <ArrowRight size={16} />
                         </button>
                       </div>
@@ -1702,8 +1725,9 @@ export default function App() {
                       </span>
                       <h3>Agente de captura</h3>
                       <p>
-                        Convierte lo que escribes en una propuesta estructurada.
-                        Si faltan datos, te pregunta antes de continuar.
+                        Convierte lo que escribes o dictas en una propuesta
+                        estructurada. Si faltan datos, te pregunta antes de
+                        continuar.
                       </p>
                       <span className="specialist-rule">
                         <Check size={14} />
@@ -1715,8 +1739,10 @@ export default function App() {
                     <ShieldCheck size={18} />
                     <span>
                       Los agentes reciben tus instrucciones y los datos
-                      necesarios para responder a través de OpenAI. Tu libro y
-                      los archivos originales permanecen en este equipo.
+                      necesarios para responder a través de OpenAI. Al usar PDF,
+                      capturas o dictado, el archivo seleccionado también se
+                      envía para su lectura o transcripción. El libro se guarda
+                      en este equipo.
                     </span>
                   </div>
                 </>
@@ -1760,70 +1786,23 @@ export default function App() {
           </button>
         </div>
       )}
-      <input
-        ref={fileInput}
-        type="file"
-        accept=".xlsx"
-        className="sr-only"
-        onChange={(e) => void upload(e.target.files?.[0])}
-      />
       {importOpen && (
         <Modal
-          title="Conecta tu libro de trabajo"
-          subtitle="Importa tu Excel y revisa los movimientos antes de guardarlos."
+          title="Añade movimientos"
+          subtitle="Excel, PDF o captura: revisa la propuesta antes de confirmar."
           onClose={() => !busy && setImportOpen(false)}
         >
-          <button
-            className="upload-drop"
-            disabled={busy}
-            onClick={() =>
-              health?.demo_mode
-                ? void localImport()
-                : fileInput.current?.click()
-            }
-          >
-            <span className="upload-icon">
-              {busy ? (
-                <LoaderCircle size={30} className="spin" />
-              ) : (
-                <FileSpreadsheet size={30} />
-              )}
-            </span>
-            <strong>
-              {busy
-                ? "Preparando la vista previa…"
-                : health?.demo_mode
-                  ? "Cargar movimientos ficticios"
-                  : "Selecciona tu archivo Excel"}
-            </strong>
-            <span>
-              {health?.demo_mode
-                ? "24 movimientos de ejemplo · Sin datos reales"
-                : "Formato .xlsx · Hasta 15 MB"}
-            </span>
-            <small>Efectivo · Banco · Tarjeta BBVA</small>
-          </button>
-          {meta?.local_workbook_available && !health?.demo_mode && (
-            <button
-              className="local-file-button"
-              onClick={() => void localImport()}
-              disabled={busy}
-            >
-              <FileSpreadsheet size={22} />
-              <span>
-                <strong>Cargar ejemplo ficticio</strong>
-                <small>movimientos-demo.json · Datos ficticios</small>
-              </span>
-              <ArrowRight size={18} />
-            </button>
-          )}
-          <div className="notice">
-            <ShieldCheck size={18} />
-            <span>
-              Se conserva el archivo original. La importación muestra errores y
-              duplicados antes de pedirte confirmación.
-            </span>
-          </div>
+          <ImportIntake
+            demoMode={health?.demo_mode !== false}
+            aiConfigured={!!health?.ai_configured}
+            initialAccount={account}
+            onBusy={setBusy}
+            onCreated={(p) => {
+              setImportOpen(false);
+              setProposal(p);
+              refresh();
+            }}
+          />
         </Modal>
       )}
       {proposal && (
@@ -1871,7 +1850,7 @@ export default function App() {
               "Archivo de origen":
                 detail.source_file || "Registro preparado por el agente",
               Ubicación: detail.source_sheet
-                ? `${detail.source_sheet} · fila ${detail.source_row}`
+                ? `${detail.source_sheet} · ${/^(Página|Imagen)/.test(detail.source_sheet) ? "registro" : "fila"} ${detail.source_row}`
                 : "Captura manual",
               Estado: detail.id
                 ? "Confirmado · sin conciliación bancaria"
@@ -1912,9 +1891,11 @@ export default function App() {
             </pre>
           )}
           <p className="help-copy">
-            El importador lee las hojas de efectivo, banco y tarjeta del
-            Balance. Los estados de cuenta PDF, Telegram y facturación quedan
-            para la siguiente etapa.
+            Puedes importar las hojas de efectivo, banco y tarjeta desde Excel,
+            o preparar movimientos a partir de un PDF o captura. El dictado deja
+            una transcripción editable en el agente de captura. En modo demo,
+            estas opciones utilizan ejemplos ficticios, sin leer archivos ni
+            grabar audio.
           </p>
           <div className="notice">
             <ShieldCheck size={18} />
