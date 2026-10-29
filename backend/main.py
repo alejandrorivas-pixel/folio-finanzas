@@ -1,0 +1,200 @@
+from contextlib import asynccontextmanager
+from pathlib import Path
+import asyncio
+import io
+import json
+import os
+from typing import Literal
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field, StrictInt
+
+from . import ledger
+from .importer import parse_workbook
+
+ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(ROOT / ".env.local", override=False)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    ledger.init_db()
+    yield
+
+
+app = FastAPI(title="Folio · Finanzas de tu negocio", lifespan=lifespan)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
+
+
+class Confirmation(BaseModel):
+    confirm: Literal[True]
+
+
+class Manual(BaseModel):
+    date: str
+    account: str
+    kind: str
+    category: str
+    description: str = Field(min_length=1, max_length=1000)
+    amount_minor: StrictInt
+    reference: str | None = Field(default=None, max_length=300)
+    property: str | None = Field(default=None, max_length=100)
+
+
+class Chat(BaseModel):
+    message: str = Field(min_length=1, max_length=3000)
+    mode: Literal["analyst", "capture"] = "analyst"
+    month: str | None = None
+    account: str | None = None
+    history: list[dict[str, str]] = Field(default_factory=list, max_length=10)
+
+
+@app.exception_handler(ValueError)
+async def value_error(request, exc):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(KeyError)
+async def key_error(request, exc):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=404, content={"detail": str(exc.args[0])})
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "ai_configured": bool(os.environ.get("OPENAI_API_KEY", "").strip()), "model": os.environ.get("OPENAI_MODEL", "gpt-5.4-mini")}
+
+
+@app.get("/api/meta")
+def meta():
+    return {**ledger.metadata(), "local_workbook_available": (ROOT.parent / "Balance V6.11.xlsx").is_file()}
+
+
+@app.get("/api/summary")
+def summary(month: str | None = None, account: str | None = None):
+    return ledger.summary(month or None, account or None)
+
+
+@app.get("/api/movements")
+def movements(month: str | None = None, account: str | None = None, category: str | None = None,
+              search: str | None = None, ids: str | None = None, page: int = 1, size: int = 25):
+    if page < 1 or size < 1 or size > 100:
+        raise ValueError("Paginación inválida")
+    rows = ledger.query_movements(month or None, account or None, category or None, search or None,
+        ids.split(",") if ids is not None else None)
+    return {"items": rows[(page - 1) * size:page * size], "total": len(rows), "page": page, "size": size, "totals": ledger.totals(rows)}
+
+
+@app.get("/api/movements/{mid}")
+def movement(mid: str):
+    rows = ledger.query_movements(ids=[mid])
+    if not rows:
+        raise KeyError("Movimiento no encontrado")
+    return rows[0]
+
+
+@app.post("/api/imports/preview")
+async def preview(file: UploadFile = File(...)):
+    if not str(file.filename).lower().endswith(".xlsx"):
+        raise ValueError("Selecciona un archivo .xlsx")
+    content = await file.read(15 * 1024 * 1024 + 1)
+    payload = await asyncio.to_thread(parse_workbook, content, Path(file.filename).name)
+    return ledger.add_proposal("import", payload)
+
+
+@app.post("/api/imports/local-preview")
+def local_preview():
+    path = ROOT.parent / "Balance V6.11.xlsx"
+    if not path.is_file():
+        raise KeyError("No se encontró el Excel de trabajo; súbelo desde tu equipo")
+    return ledger.add_proposal("import", parse_workbook(path.read_bytes(), path.name))
+
+
+@app.get("/api/proposals")
+def proposals():
+    return ledger.pending_proposals()
+
+
+@app.post("/api/proposals/manual")
+def manual(body: Manual):
+    r = ledger.validate_manual(body.model_dump())
+    return ledger.add_proposal("manual", {"movements": [r], "errors": [], "notes": [], "openings": [], "categories": []})
+
+
+@app.get("/api/proposals/{pid}")
+def proposal(pid: str):
+    return ledger.get_proposal(pid)
+
+
+@app.post("/api/proposals/{pid}/confirm")
+def confirm(pid: str, body: Confirmation):
+    return ledger.confirm_proposal(pid)
+
+
+@app.post("/api/proposals/{pid}/reject")
+def reject(pid: str, body: Confirmation):
+    ledger.reject_proposal(pid)
+    return {"status": "rejected"}
+
+
+@app.post("/api/chat")
+async def chat(body: Chat):
+    from . import ai
+    ai.check_key()
+    ledger.bounds(body.month)
+    try:
+        if body.mode == "capture":
+            return await asyncio.wait_for(ai.capture(body.message, body.history), timeout=60)
+        return await asyncio.wait_for(ai.analyze(body.message, body.month, body.account, body.history), timeout=60)
+    except ValueError:
+        raise
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "El agente tardó demasiado. Intenta una consulta más concreta.")
+    except Exception as exc:
+        code = getattr(exc, "status_code", None)
+        if code in (401, 403):
+            raise HTTPException(502, "OpenAI rechazó la conexión. Revisa la clave y los permisos del proyecto.")
+        if code == 429:
+            raise HTTPException(429, "OpenAI indicó un límite de uso o saldo insuficiente. Revisa tu proyecto antes de reintentar.")
+        raise HTTPException(502, "No se pudo completar la consulta de IA. Los movimientos confirmados siguen disponibles.")
+
+
+@app.get("/api/export")
+def export(month: str | None = None, account: str | None = None):
+    import csv
+    rows = ledger.query_movements(month or None, account or None)
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["id", "fecha", "cuenta", "tipo", "categoria", "descripcion", "importe_MXN", "referencia", "propiedad", "tratamiento", "archivo", "hoja", "fila"])
+    def safe(value):
+        if value is None:
+            return ""
+        s = str(value)
+        return "'" + s if s.startswith(("=", "+", "-", "@", "\t", "\r")) else s
+    for r in rows:
+        amount = str(ledger.Decimal(r["amount_minor"]) / 100)
+        writer.writerow([safe(r[k]) for k in ["id", "date", "account", "kind", "category", "description"]] + [amount] +
+            [safe(r.get(k)) for k in ["reference", "property", "treatment", "source_file", "source_sheet", "source_row"]])
+    return StreamingResponse(iter(["\ufeff" + out.getvalue()]), media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="folio-movimientos.csv"'})
+
+
+DIST = ROOT / "frontend" / "dist"
+if DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
+
+    @app.get("/{path:path}")
+    def frontend(path: str):
+        if path.startswith("api/"):
+            raise HTTPException(404)
+        file = DIST / path
+        if file.is_file() and file.resolve().is_relative_to(DIST.resolve()):
+            return FileResponse(file)
+        return FileResponse(DIST / "index.html")
