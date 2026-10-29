@@ -59,6 +59,10 @@ class Manual(BaseModel):
     property: str | None = Field(default=None, max_length=100)
 
 
+class AgentManual(Manual):
+    request_id: str = Field(min_length=8, max_length=100, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]+$")
+
+
 class Chat(BaseModel):
     message: str = Field(min_length=1, max_length=3000)
     mode: Literal["analyst", "capture"] = "analyst"
@@ -110,7 +114,7 @@ async def key_error(request, exc):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "ai_configured": bool(os.environ.get("OPENAI_API_KEY", "").strip()), "model": os.environ.get("OPENAI_MODEL", "gpt-5.4-mini"), "demo_mode": ledger.demo_mode()}
+    return {"application": "folio", "status": "ok", "ai_configured": bool(os.environ.get("OPENAI_API_KEY", "").strip()), "model": os.environ.get("OPENAI_MODEL", "gpt-5.4-mini"), "demo_mode": ledger.demo_mode()}
 
 
 @app.get("/api/meta")
@@ -224,6 +228,14 @@ def proposals():
 def manual(body: Manual):
     r = ledger.validate_manual(body.model_dump())
     return ledger.add_proposal("manual", {"movements": [r], "errors": [], "notes": [], "openings": [], "categories": []})
+
+
+@app.post("/api/agent/proposals/manual")
+def agent_manual(body: AgentManual):
+    try:
+        return ledger.propose_agent_movement(body.request_id, body.model_dump(exclude={"request_id"}))
+    except ledger.IdempotencyConflict as exc:
+        raise HTTPException(409, str(exc))
 
 
 @app.get("/api/proposals/{pid}")

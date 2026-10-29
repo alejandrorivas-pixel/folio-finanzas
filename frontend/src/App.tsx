@@ -926,6 +926,14 @@ export default function App() {
   const [evidence, setEvidence] = useState<Evidence | null>(null);
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
   useEffect(() => {
+    // An external MCP agent can prepare proposals while this page is open.
+    const onFocus = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refresh]);
+  useEffect(() => {
     let active = true;
     Promise.all([
       api<Meta>("/api/meta"),
@@ -1004,6 +1012,7 @@ export default function App() {
   };
   const nav = (next: View) => {
     setView(next);
+    if (next === "pending") refresh();
     if (next !== "movements") setEvidence(null);
   };
   const showEvidence = (e: Evidence) => {

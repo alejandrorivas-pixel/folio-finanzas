@@ -28,7 +28,7 @@ Validación: `npm run build` (real) o `npm run build:demo` (diseño).
 
 ## App completa en local
 
-Requiere Python 3.10+ y Node 20+.
+Requiere Python 3.11+ y Node 20+.
 
 ```sh
 # Si python3 es antiguo: PYTHON_BIN=python3.12 ./scripts/setup.sh
@@ -59,6 +59,23 @@ FOLIO_DEMO=0 PORT=8001 ./start.sh
 
 Abre `http://127.0.0.1:8001`. Los datos que incorpores a esta base serán los de tus archivos; la app no los anonimiza automáticamente.
 
+## Conectar un agente externo por MCP
+
+Folio ofrece un servidor MCP por **stdio** para que Codex u otro cliente compatible consulte los datos y prepare movimientos con sus propias herramientas. El puente usa la misma API y los mismos cálculos del backend. No ejecuta otro modelo ni necesita una clave de OpenAI.
+
+Primero inicia la app con `./start.sh`. Después registra el puente en Codex, sustituyendo la ruta por la ubicación absoluta de tu clon:
+
+```sh
+codex mcp add folio --env FOLIO_API_URL=http://127.0.0.1:8000 -- /ruta/absoluta/folio-finanzas/start-mcp.sh
+codex mcp get folio
+```
+
+El cliente inicia `start-mcp.sh` y se comunica por entrada y salida estándar; no hay un puerto MCP adicional. Si tu app está en modo real en el puerto 8001, cambia `FOLIO_API_URL` a `http://127.0.0.1:8001`. La selección de datos depende del backend al que conectes: el puente no anonimiza su respuesta.
+
+Prueba con: “Consulta mis gastos de octubre y muestra los movimientos que respaldan el total”. Para captura: “Prepara un egreso de $125.50 del 28 de octubre de 2026 en efectivo, categoría Por revisar, descripción Compra ficticia de papelería”. El resultado queda en **Por confirmar**, donde una persona lo revisa y confirma en la web. El MCP no expone confirmación, rechazo ni eliminación.
+
+Consulta [MCP_GUIDE.md](MCP_GUIDE.md) para las herramientas, la idempotencia y la comprobación de conexión. La API HTTP sigue disponible en `http://127.0.0.1:8000/docs` para integraciones que necesiten un contrato REST. No hace falta mantener una segunda implementación de los cálculos en una CLI.
+
 ## Captura de documentos y voz
 
 La app permite preparar movimientos desde PDF, capturas de pantalla y dictado. Todos pasan por revisión: subir un documento o transcribir un audio **no cambia los saldos**.
@@ -77,7 +94,7 @@ La detección de duplicados compara fecha, cuenta, tipo, descripción, importe, 
 
 ## Estado y alcance
 
-Implementados: dashboard, movimientos y filtros, importación específica de Balance XLSX, extracción de PDF e imágenes, transcripción y dictado editable, vista previa, confirmación, duplicados, registro manual, procedencia, exportación CSV, agentes acotados e interfaz de consulta con respaldo.
+Implementados: dashboard, movimientos y filtros, importación específica de Balance XLSX, extracción de PDF e imágenes, transcripción y dictado editable, vista previa, confirmación, duplicados, registro manual, procedencia, exportación CSV, agentes acotados, interfaz de consulta con respaldo y puente MCP local para agentes externos.
 
 La demostración usa `fixtures/movimientos-demo.json` y ejemplos creados de cero con importes, clientes, proveedores y folios inventados. El modo real optativo empieza vacío: cada incorporación requiere preparar una propuesta y confirmar. El importador Excel admite las hojas `Movimientos Efectivo`, `Movimientos Banco` y `Movimientos Tarjeta BBVA`, con encabezados en la fila 3. Usa el catálogo del libro y los saldos iniciales de sus hojas de balance. Otros formatos de Excel requieren su adaptador. Las filas con error bloquean la confirmación; pueden corregirse en la propuesta con un motivo registrado, sin alterar el original.
 

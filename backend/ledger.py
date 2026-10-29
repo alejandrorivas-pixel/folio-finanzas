@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import calendar
+import hashlib
 import json
 import os
 import sqlite3
@@ -98,6 +99,8 @@ def init_db():
         CREATE INDEX IF NOT EXISTS movements_date ON movements(date);
         CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL,
           proposal_id TEXT, details TEXT NOT NULL, created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS agent_requests(request_id TEXT PRIMARY KEY,
+          fingerprint TEXT NOT NULL, proposal_id TEXT NOT NULL REFERENCES proposals(id), created_at TEXT NOT NULL);
         """)
         for a in ACCOUNTS:
             con.execute("INSERT OR IGNORE INTO accounts(id,name,kind) VALUES(:id,:name,:kind)", a)
@@ -206,6 +209,36 @@ def add_proposal(kind, payload):
     pid = str(uuid.uuid4())
     with connection() as con:
         con.execute("INSERT INTO proposals(id,kind,payload,created_at) VALUES(?,?,?,?)", (pid, kind, json.dumps(payload, ensure_ascii=False), now()))
+    return get_proposal(pid)
+
+
+class IdempotencyConflict(ValueError):
+    pass
+
+
+def propose_agent_movement(request_id, data):
+    """An agent may prepare a proposal; retries cannot create extra proposals."""
+    movement = validate_manual(data)
+    movement["source_file"] = "Propuesta de agente externo"
+    fingerprint = hashlib.sha256(json.dumps(movement, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    with connection() as con:
+        con.execute("BEGIN IMMEDIATE")
+        previous = con.execute("SELECT fingerprint,proposal_id FROM agent_requests WHERE request_id=?", (request_id,)).fetchone()
+        if previous:
+            if previous["fingerprint"] != fingerprint:
+                raise IdempotencyConflict("Este request_id ya corresponde a otros datos. Para un movimiento diferente usa un identificador nuevo.")
+            pid = previous["proposal_id"]
+        else:
+            pid = str(uuid.uuid4())
+            payload = {"movements": [movement], "errors": [], "openings": [], "categories": [],
+                "notes": ["Propuesta de un agente externo. Revisa los datos y confirma desde Folio para incorporarlos al libro."],
+                "agent_request_id": request_id}
+            con.execute("INSERT INTO proposals(id,kind,payload,created_at) VALUES(?,?,?,?)",
+                (pid, "manual", json.dumps(payload, ensure_ascii=False), now()))
+            con.execute("INSERT INTO agent_requests(request_id,fingerprint,proposal_id,created_at) VALUES(?,?,?,?)",
+                (request_id, fingerprint, pid, now()))
+            con.execute("INSERT INTO audit(action,proposal_id,details,created_at) VALUES('agent_proposal',?,?,?)",
+                (pid, json.dumps({"request_id": request_id}), now()))
     return get_proposal(pid)
 
 

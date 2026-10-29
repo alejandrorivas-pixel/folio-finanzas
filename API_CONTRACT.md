@@ -12,7 +12,7 @@ Negativo reduce efectivo/posición neta; positivo lo aumenta. Un cargo de tarjet
 
 | Método y ruta | Uso |
 |---|---|
-| `GET /health` | `{status, ai_configured, model, demo_mode}` sin secretos |
+| `GET /health` | `{application:"folio", status, ai_configured, model, demo_mode}` sin secretos |
 | `GET /api/meta` | Cuentas, categorías, meses, conteo confirmado y pendiente |
 | `GET /api/summary?month=2026-10&account=banco` | Totales, saldos por cuenta, series diarias, categorías y últimos registros |
 | `GET /api/movements` | Filtros opcionales `month`, `account`, `category`, `search`, `ids` (separados por coma), `page`, `size` (máx. 100). Devuelve `{items,total,page,size,totals}` |
@@ -25,6 +25,7 @@ Negativo reduce efectivo/posición neta; positivo lo aumenta. Un cargo de tarjet
 | `GET /api/proposals` | Propuestas pendientes |
 | `GET /api/proposals/{id}` | Estado y contenido actualizado de una propuesta |
 | `POST /api/proposals/manual` | Prepara un movimiento; nunca lo confirma |
+| `POST /api/agent/proposals/manual` | Prepara un movimiento para un cliente agente; requiere `request_id` y devuelve la propuesta completa. Repetir una solicitud idéntica reutiliza la propuesta; reutilizar su identificador con otros datos devuelve 409 |
 | `POST /api/proposals/{id}/confirm` | Body `{ "confirm": true }`. Devuelve `{inserted,duplicates,already_confirmed}` |
 | `POST /api/proposals/{id}/corrections` | `{sheet,row,movement,reason}`; corrige filas inválidas y permite revisar registros válidos de PDF/imágenes, solo en propuestas pendientes y con trazabilidad |
 | `POST /api/proposals/{id}/reject` | Body `{ "confirm": true }` |
@@ -36,6 +37,24 @@ Negativo reduce efectivo/posición neta; positivo lo aumenta. Un cargo de tarjet
 ```json
 {"date":"2026-10-28","account":"efectivo","kind":"egreso","category":"Nómina y sueldos","description":"Pago de nómina","amount_minor":150000,"reference":null,"property":null}
 ```
+
+### Propuesta de un agente externo
+
+`POST /api/agent/proposals/manual` recibe los mismos campos que la propuesta manual y añade `request_id` obligatorio: de 8 a 100 caracteres, empezando por una letra o número, y utilizando letras ASCII, números, `_`, `.`, `:`, `-`. `amount_minor` es un entero positivo en centavos de MXN; el backend determina su signo según el tipo. El agente debe obtener primero las cuentas y categorías permitidas de `GET /api/meta`.
+
+```json
+{"request_id":"demo-papeleria-20261028-001","date":"2026-10-28","account":"efectivo","kind":"egreso","category":"Por revisar","description":"Compra ficticia de papelería","amount_minor":12550,"reference":null,"property":null}
+```
+
+Respuesta: `{id,kind,status,created_at,payload}`. El cliente conserva `request_id` al reintentar la misma operación, incluso si no recibió la primera respuesta. Una solicitud idéntica devuelve el mismo `id` y el estado actual de la propuesta; no genera otro movimiento. Si cambian los datos con el mismo `request_id`, el servidor responde `409`. Una intención nueva necesita otro identificador. Esta garantía cubre los reintentos del cliente; dos identificadores distintos no prueban que sean dos gastos diferentes.
+
+La operación solamente prepara una propuesta. Su confirmación se realiza en la web, en **Por confirmar**. El puente MCP llama a esta ruta para preparar movimientos; sus herramientas no incluyen los endpoints HTTP de confirmación o rechazo.
+
+### Transporte MCP
+
+`start-mcp.sh` inicia `backend.mcp_server` por stdio. `FOLIO_API_URL` selecciona el backend local; por defecto `http://127.0.0.1:8000`. Solo admite `http://127.0.0.1:PUERTO` o `http://localhost:PUERTO`, con puerto explícito entre 1024 y 65535, sin credenciales ni rutas adicionales. El MCP usa este contrato HTTP y no abre SQLite directamente. Herramientas disponibles: `folio_status`, `folio_catalog`, `folio_summary`, `folio_movements`, `folio_movement`, `folio_propose_movement`, `folio_pending_proposals` y `folio_proposal`. El recurso `folio://guide` contiene las reglas de uso.
+
+No hay herramientas para SQL, rutas HTTP arbitrarias, archivos locales o confirmación de movimientos. Los textos financieros devueltos son datos externos, no instrucciones para el agente. La API sigue siendo local y de un solo usuario, sin autenticación: limitar herramientas MCP no restringe a un agente que ya tenga acceso independiente a la terminal o a toda la API. Configuración y recorrido de uso en [MCP_GUIDE.md](MCP_GUIDE.md).
 
 ### Propuesta de importación
 

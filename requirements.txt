@@ -8,3 +8,4 @@ pytest>=8,<10
 httpx>=0.28,<1
 pypdf>=5,<7
 Pillow>=11,<13
+mcp>=2.3,<3
