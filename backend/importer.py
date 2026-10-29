@@ -18,6 +18,26 @@ SHEETS = {
 }
 
 
+def refresh_preview(payload):
+    """Recompute identity and counters after an explicit proposal correction."""
+    occurrences = Counter()
+    keys = ledger.existing_keys()
+    order = {name: i for i, name in enumerate(SHEETS)}
+    payload["movements"].sort(key=lambda r: (order.get(r.get("source_sheet"), 99), r.get("source_row", 0)))
+    for r in payload["movements"]:
+        canonical = {k: r.get(k) for k in ["date", "account", "kind", "description", "amount_minor", "reference", "property"]}
+        base = hashlib.sha256(json.dumps(canonical, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        occurrences[base] += 1
+        r["dedup_key"] = f"{base}:{occurrences[base]}"
+        r["duplicate"] = r["dedup_key"] in keys
+    new = [r for r in payload["movements"] if not r["duplicate"]]
+    payload["stats"] = {**ledger.totals(new), "total": len(payload["movements"]), "new": len(new),
+        "duplicates": len(payload["movements"]) - len(new), "errors": len(payload["errors"]),
+        "accounts": dict(Counter(r["account"] for r in new)),
+        "review": sum(r["treatment"] == "por_revisar" for r in new)}
+    return payload
+
+
 def parse_workbook(content, filename):
     if len(content) > 15 * 1024 * 1024:
         raise ValueError("El archivo excede 15 MB")
@@ -35,8 +55,6 @@ def parse_workbook(content, filename):
             raise ValueError("No se encontraron las hojas de movimientos del Balance. Usa tu archivo original .xlsx.")
         sha = hashlib.sha256(content).hexdigest()
         movements, errors, notes, openings, categories = [], [], [], [], set()
-        occurrences = Counter()
-        keys = ledger.existing_keys()
         for name, (account, balance_sheet, cell) in SHEETS.items():
             if name not in w.sheetnames:
                 notes.append(f"No se encontró {name}; no se importará esa cuenta.")
@@ -55,6 +73,8 @@ def parse_workbook(content, filename):
                 notes.append(f"Falta el saldo inicial de {account}; su saldo quedará sin determinar.")
             for idx, row in enumerate(sheet.iter_rows(min_row=4, max_col=17, values_only=True), 4):
                 _, dt, kind, cat, desc, ref, prop, incoming, outgoing, *_ = row
+                if dt is None and kind is None and ledger.normalize(cat) in {"total", "totales", "subtotal"}:
+                    continue
                 if not any(v is not None for v in (dt, kind, desc, incoming, outgoing)):
                     continue
                 if kind is None and incoming is None and outgoing is None:
@@ -85,29 +105,29 @@ def parse_workbook(content, filename):
                         "property": str(prop).strip() if prop is not None else None,
                         "treatment": ledger.treatment(category, kind), "source_file": filename,
                         "source_sheet": name, "source_row": idx, "source_hash": sha}
-                    canonical = {k: r[k] for k in ["date", "account", "kind", "category", "description", "amount_minor", "reference", "property"]}
-                    # Category is editable metadata, not transaction identity.
-                    canonical.pop("category")
-                    base = hashlib.sha256(json.dumps(canonical, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-                    occurrences[base] += 1
-                    r["dedup_key"] = f"{base}:{occurrences[base]}"
-                    r["duplicate"] = r["dedup_key"] in keys
                     movements.append(r)
                 except (ValueError, TypeError) as exc:
-                    errors.append({"sheet": name, "row": idx, "message": str(exc)})
+                    amount_hint = None
+                    try:
+                        a_hint, b_hint = ledger.money(incoming or 0), ledger.money(outgoing or 0)
+                        if bool(a_hint) != bool(b_hint):
+                            amount_hint = abs(a_hint or b_hint)
+                    except ValueError:
+                        pass
+                    errors.append({"sheet": name, "row": idx, "message": str(exc), "draft": {
+                        "date": dt.date().isoformat() if isinstance(dt, datetime) else dt.isoformat() if isinstance(dt, date) else "",
+                        "account": account, "kind": ledger.normalize(kind), "category": str(cat or "Por revisar").strip(),
+                        "description": str(desc or "").strip(), "amount_minor": amount_hint,
+                        "reference": str(ref).strip() if ref is not None else None,
+                        "property": str(prop).strip() if prop is not None else None}})
         if "Catalogos" in w.sheetnames:
             for row in w["Catalogos"].iter_rows(min_row=2, max_col=3, values_only=True):
                 for value in (row[0], row[2]):
                     if isinstance(value, str) and value.strip():
                         categories.add(value.strip())
-        new = [r for r in movements if not r["duplicate"]]
         if not movements and not errors:
             errors.append({"sheet": "Archivo", "row": 0, "message": "No se encontraron movimientos"})
-        return {"filename": filename, "file_hash": sha, "movements": movements, "openings": openings,
-            "categories": sorted(categories), "errors": errors, "notes": notes,
-            "stats": {**ledger.totals(new), "total": len(movements), "new": len(new),
-                "duplicates": len(movements) - len(new), "errors": len(errors),
-                "accounts": dict(Counter(r["account"] for r in new)),
-                "review": sum(r["treatment"] == "por_revisar" for r in new)}}
+        return refresh_preview({"filename": filename, "file_hash": sha, "movements": movements, "openings": openings,
+            "categories": sorted(categories), "errors": errors, "notes": notes, "corrections": []})
     finally:
         w.close()

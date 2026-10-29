@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import ImportCorrection from "./ImportCorrection";
+import type { ImportError } from "./types";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -243,7 +245,9 @@ function ProposalModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [limit, setLimit] = useState(8);
-  const p = proposal.payload,
+  const [current, setCurrent] = useState(proposal);
+  const [correction, setCorrection] = useState<ImportError | null>(null);
+  const p = current.payload,
     stats = p.stats;
   const confirm = async () => {
     setBusy(true);
@@ -326,12 +330,42 @@ function ProposalModal({
       )}
       {p.errors.length > 0 && (
         <div className="error-box">
-          <strong>Corrige estas filas en el Excel y vuelve a subirlo.</strong>
+          <strong>Revisa estas filas antes de confirmar.</strong>
           {p.errors.slice(0, 12).map((e, i) => (
             <p key={i}>
               {e.sheet}, fila {e.row}: {e.message}
+              {e.draft && (
+                <button
+                  className="button secondary small-button"
+                  style={{ marginLeft: 10 }}
+                  onClick={() => setCorrection(e)}
+                >
+                  Revisar fila
+                </button>
+              )}
             </p>
           ))}
+        </div>
+      )}
+      {correction && (
+        <ImportCorrection
+          key={`${correction.sheet}-${correction.row}`}
+          error={correction}
+          proposal={current}
+          onCancel={() => setCorrection(null)}
+          onSaved={(p) => {
+            setCurrent(p);
+            setCorrection(null);
+          }}
+        />
+      )}
+      {!!p.corrections?.length && (
+        <div className="notice">
+          <ShieldCheck size={18} />
+          <span>
+            {p.corrections.length} correcciones revisadas. Se guardará el motivo
+            y el origen de cada una.
+          </span>
         </div>
       )}
       {p.notes.map((n, i) => (
@@ -527,7 +561,7 @@ function ManualModal({
           <label>
             Folio de propiedad <span>(opcional)</span>
             <input
-              placeholder="R10006"
+              placeholder="DEMO-001"
               maxLength={100}
               value={form.property}
               onChange={(e) => update("property", e.target.value)}
@@ -580,7 +614,10 @@ function AgentPanel({
     [busy, setBusy] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (messages.length || busy) {
+      const scroll = bottom.current?.parentElement;
+      scroll?.scrollTo({ top: scroll.scrollHeight, behavior: "smooth" });
+    }
   }, [messages, busy]);
   const send = async (text = input) => {
     if (!text.trim() || busy) return;
@@ -974,9 +1011,9 @@ export default function App() {
           folio<span className="brand-dot">.</span>
         </a>
         <div className="workspace-card">
-          <span className="workspace-logo">M</span>
+          <span className="workspace-logo">D</span>
           <div>
-            <strong>Magno Grupo</strong>
+            <strong>Empresa Demo</strong>
             <span>Espacio de trabajo</span>
           </div>
           <ChevronDown size={14} />
@@ -1025,7 +1062,7 @@ export default function App() {
             <ArrowUpRight size={14} />
           </button>
           <div className="profile">
-            <span>MG</span>
+            <span>ED</span>
             <div>
               <strong>Mi negocio</strong>
               <small>Administrador · MXN</small>
@@ -1061,7 +1098,7 @@ export default function App() {
             >
               <CircleHelp size={18} />
             </button>
-            <span className="avatar-small">MG</span>
+            <span className="avatar-small">ED</span>
           </div>
         </header>
         <main>
@@ -1119,6 +1156,16 @@ export default function App() {
                 <strong>Modo diseño · datos ficticios.</strong> Las respuestas
                 del chat son simuladas y las importaciones son ejemplos. No se
                 está usando una clave API.
+              </span>
+            </div>
+          )}
+          {health?.demo_mode && import.meta.env.VITE_DEMO !== "true" && (
+            <div className="notice">
+              <ShieldCheck size={18} />
+              <span>
+                <strong>Demostración · todos los datos son ficticios.</strong>{" "}
+                Empresa, movimientos, proveedores, folios y saldos son ejemplos
+                inventados.
               </span>
             </div>
           )}
@@ -1729,7 +1776,11 @@ export default function App() {
           <button
             className="upload-drop"
             disabled={busy}
-            onClick={() => fileInput.current?.click()}
+            onClick={() =>
+              health?.demo_mode
+                ? void localImport()
+                : fileInput.current?.click()
+            }
           >
             <span className="upload-icon">
               {busy ? (
@@ -1741,12 +1792,18 @@ export default function App() {
             <strong>
               {busy
                 ? "Preparando la vista previa…"
-                : "Selecciona tu archivo Excel"}
+                : health?.demo_mode
+                  ? "Cargar movimientos ficticios"
+                  : "Selecciona tu archivo Excel"}
             </strong>
-            <span>Formato .xlsx · Hasta 15 MB</span>
+            <span>
+              {health?.demo_mode
+                ? "24 movimientos de ejemplo · Sin datos reales"
+                : "Formato .xlsx · Hasta 15 MB"}
+            </span>
             <small>Efectivo · Banco · Tarjeta BBVA</small>
           </button>
-          {meta?.local_workbook_available && (
+          {meta?.local_workbook_available && !health?.demo_mode && (
             <button
               className="local-file-button"
               onClick={() => void localImport()}
@@ -1754,8 +1811,8 @@ export default function App() {
             >
               <FileSpreadsheet size={22} />
               <span>
-                <strong>Abrir mi Excel de trabajo</strong>
-                <small>Balance V6.11.xlsx · Disponible en este equipo</small>
+                <strong>Cargar ejemplo ficticio</strong>
+                <small>movimientos-demo.json · Datos ficticios</small>
               </span>
               <ArrowRight size={18} />
             </button>

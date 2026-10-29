@@ -36,7 +36,9 @@ Requiere Python 3.10+ y Node 20+.
 ./start.sh
 ```
 
-Abre `http://127.0.0.1:8000`. El script hereda `OPENAI_API_KEY` de la terminal; opcionalmente el backend puede leer `.env.local` en la raíz, excluido de Git. La clave nunca debe colocarse en variables `VITE_*` ni en código del navegador. `OPENAI_MODEL` permite cambiar el modelo (default: `gpt-5.4-mini`).
+Abre `http://127.0.0.1:8000`. **Por defecto la app completa utiliza exclusivamente datos ficticios**, guardados en `data/demo.sqlite`. La empresa se llama Empresa Demo. Se precargan 18 registros de ejemplo; “Cargar movimientos ficticios” prepara otros 6 y detecta los 18 ya presentes. No hay acceso automático a archivos personales y este modo rechaza cargas de XLSX reales.
+
+El script hereda `OPENAI_API_KEY` de la terminal; opcionalmente el backend puede leer `.env.local` en la raíz, excluido de Git. La clave nunca debe colocarse en variables `VITE_*` ni en código del navegador. `OPENAI_MODEL` permite cambiar el modelo (default: `gpt-5.4-mini`). En la app completa los agentes, cuando están conectados, consultan el dataset ficticio mediante el backend; el modo de diseño del frontend mantiene respuestas simuladas.
 
 Para desarrollo simultáneo:
 
@@ -47,13 +49,13 @@ Para desarrollo simultáneo:
 cd frontend && npm run dev
 ```
 
-El backend guarda los datos en `data/finanzas.sqlite`, excluido de Git. `FINANZAS_DB` permite indicar una base separada para pruebas. `/health` informa si ese proceso tiene clave, sin revelar su valor.
+El backend guarda la demostración en `data/demo.sqlite`, excluido de Git. `FINANZAS_DB` permite indicar una base separada para pruebas. `/health` informa el modo de datos y si ese proceso tiene clave, sin revelar su valor. El uso posterior de archivos propios requiere activar explícitamente `FOLIO_DEMO=0`; utiliza `data/finanzas.sqlite`, separada de la demostración, y exige seleccionar el archivo manualmente.
 
 ## Estado y alcance
 
 Implementados: dashboard, movimientos y filtros, importación específica de Balance XLSX, vista previa, confirmación, duplicados, registro manual, procedencia, exportación CSV, agentes acotados e interfaz de consulta con respaldo.
 
-El modo real empieza vacío: hay que subir el Excel y confirmar. El importador admite las hojas `Movimientos Efectivo`, `Movimientos Banco` y `Movimientos Tarjeta BBVA`, con encabezados en la fila 3. Usa el catálogo del libro y los saldos iniciales de sus hojas de balance. Otros formatos requieren su adaptador.
+La demostración usa exclusivamente `fixtures/movimientos-demo.json`, creado de cero con importes, clientes, proveedores y folios inventados. El modo real optativo empieza vacío: hay que subir el Excel y confirmar. El importador admite las hojas `Movimientos Efectivo`, `Movimientos Banco` y `Movimientos Tarjeta BBVA`, con encabezados en la fila 3. Usa el catálogo del libro y los saldos iniciales de sus hojas de balance. Otros formatos requieren su adaptador. Las filas con error bloquean la confirmación; pueden corregirse en la propuesta con un motivo registrado, sin alterar el original.
 
 Importado/confirmado **no** significa conciliado con el banco. No es un sistema fiscal ni una contabilidad completa de doble partida. Telegram, PDF bancario, audio, facturación y cálculo de nómina quedan fuera del MVP. Una sola empresa, un usuario y MXN; servidor limitado a loopback para la demo local.
 

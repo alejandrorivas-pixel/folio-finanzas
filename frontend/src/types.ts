@@ -57,7 +57,9 @@ export type Proposal = {
       review: number;
       accounts: Record<string, number>;
     };
-    errors: { sheet: string; row: number; message: string }[];
+    errors: ImportError[];
+    categories?: string[];
+    corrections?: { sheet: string; row: number; reason: string }[];
     notes: string[];
     filename?: string;
     openings: { account: string; amount_minor: number; source: string }[];
@@ -70,6 +72,21 @@ export type Meta = {
   count: number;
   pending: number;
   local_workbook_available: boolean;
+};
+export type ImportError = {
+  sheet: string;
+  row: number;
+  message: string;
+  draft?: {
+    date: string;
+    account: string;
+    kind: string;
+    category: string;
+    description: string;
+    amount_minor: number | null;
+    reference: string | null;
+    property: string | null;
+  };
 };
 export type Evidence = {
   filters: {

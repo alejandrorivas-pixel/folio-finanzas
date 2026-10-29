@@ -1,0 +1,31 @@
+{
+  "notice": "DATOS COMPLETAMENTE FICTICIOS. No representan personas, empresas ni movimientos reales.",
+  "company": "Empresa Demo",
+  "opening_minor": {"efectivo": 420000, "banco": 2850000, "tarjeta_bbva": -980000},
+  "movements": [
+    {"date":"2026-10-02","account":"banco","kind":"ingreso","category":"Comisión de Renta","description":"Comisión ficticia · Proyecto Demo A","amount_minor":1250000},
+    {"date":"2026-10-03","account":"efectivo","kind":"egreso","category":"Nómina y sueldos","description":"Nómina ficticia · Equipo Demo","amount_minor":-185000},
+    {"date":"2026-10-04","account":"tarjeta_bbva","kind":"cargo","category":"Tecnología y software","description":"Licencias ficticias · Herramienta Demo","amount_minor":-84500},
+    {"date":"2026-10-06","account":"banco","kind":"egreso","category":"Renta de oficina","description":"Oficina ficticia · Espacio Demo","amount_minor":-375000},
+    {"date":"2026-10-07","account":"banco","kind":"ingreso","category":"Investigaciones","description":"Servicio ficticio · Cliente Demo Uno","amount_minor":135000},
+    {"date":"2026-10-08","account":"tarjeta_bbva","kind":"cargo","category":"Pauta Publicitaria","description":"Campaña ficticia · Canal Demo","amount_minor":-126000},
+    {"date":"2026-10-09","account":"efectivo","kind":"ingreso","category":"Comisión de Renta","description":"Comisión ficticia · Proyecto Demo B","amount_minor":465000},
+    {"date":"2026-10-10","account":"banco","kind":"ingreso","category":"Depósito en garantía recibido","description":"Garantía ficticia · Cliente Demo Dos","amount_minor":580000},
+    {"date":"2026-10-11","account":"tarjeta_bbva","kind":"cargo","category":"Gasolina","description":"Recorrido ficticio · Ruta Demo","amount_minor":-52400},
+    {"date":"2026-10-12","account":"efectivo","kind":"egreso","category":"Pago a proveedores","description":"Pago ficticio · Proveedor Demo A","amount_minor":-97500},
+    {"date":"2026-10-13","account":"banco","kind":"egreso","category":"Pago de tarjeta","description":"Transferencia ficticia · Pago tarjeta Demo","amount_minor":-240000},
+    {"date":"2026-10-13","account":"tarjeta_bbva","kind":"pago","category":"Pago de tarjeta","description":"Abono ficticio · Desde cuenta Demo","amount_minor":240000},
+    {"date":"2026-10-15","account":"banco","kind":"egreso","category":"Nómina y sueldos","description":"Nómina ficticia · Segunda parte Demo","amount_minor":-325000},
+    {"date":"2026-10-17","account":"banco","kind":"ingreso","category":"Administraciones","description":"Administración ficticia · Cliente Demo Tres","amount_minor":196000},
+    {"date":"2026-10-18","account":"tarjeta_bbva","kind":"cargo","category":"Pauta Publicitaria","description":"Anuncio ficticio · Campaña Demo B","amount_minor":-176500},
+    {"date":"2026-10-20","account":"efectivo","kind":"egreso","category":"Comisiones a vendedores","description":"Comisión ficticia · Asesor Demo A","amount_minor":-78000},
+    {"date":"2026-10-21","account":"banco","kind":"ingreso","category":"Comisión de Renta","description":"Comisión ficticia · Proyecto Demo C","amount_minor":875000},
+    {"date":"2026-10-22","account":"tarjeta_bbva","kind":"devolucion","category":"Tecnología y software","description":"Reembolso ficticio · Licencia Demo","amount_minor":24500},
+    {"date":"2026-10-23","account":"efectivo","kind":"egreso","category":"Nómina y sueldos","description":"Nómina ficticia · Cierre semanal Demo","amount_minor":-145000},
+    {"date":"2026-10-24","account":"banco","kind":"egreso","category":"Pago a proveedores","description":"Pago ficticio · Proveedor Demo B","amount_minor":-112500},
+    {"date":"2026-10-25","account":"banco","kind":"ingreso","category":"Investigaciones","description":"Servicio ficticio · Cliente Demo Cuatro","amount_minor":157500},
+    {"date":"2026-10-26","account":"tarjeta_bbva","kind":"cargo","category":"Tecnología y software","description":"Suscripción ficticia · Plataforma Demo","amount_minor":-68900},
+    {"date":"2026-10-27","account":"efectivo","kind":"egreso","category":"Comisiones a vendedores","description":"Comisión ficticia · Asesor Demo B","amount_minor":-96500},
+    {"date":"2026-10-28","account":"banco","kind":"ingreso","category":"Administraciones","description":"Administración ficticia · Cliente Demo Cinco","amount_minor":224000}
+  ]
+}

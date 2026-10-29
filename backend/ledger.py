@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import calendar
-import hashlib
 import json
 import os
 import sqlite3
@@ -14,6 +13,10 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def demo_mode():
+    return os.environ.get("FOLIO_DEMO", "1") != "0"
 ACCOUNTS = [
     {"id": "efectivo", "name": "Efectivo", "kind": "cash"},
     {"id": "banco", "name": "Cuenta bancaria", "kind": "bank"},
@@ -60,7 +63,8 @@ def treatment(category, kind):
 
 @contextmanager
 def connection():
-    path = Path(os.environ.get("FINANZAS_DB", str(ROOT / "data" / "finanzas.sqlite")))
+    default_name = "demo.sqlite" if demo_mode() else "finanzas.sqlite"
+    path = Path(os.environ.get("FINANZAS_DB", str(ROOT / "data" / default_name)))
     path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(path, timeout=15)
     con.row_factory = sqlite3.Row
@@ -235,9 +239,9 @@ def confirm_proposal(pid):
             raise ValueError("Resuelve los errores del archivo antes de confirmar")
         inserted = duplicates = 0
         for r in payload["movements"]:
-            cursor = con.execute("""INSERT OR IGNORE INTO movements(id,date,account,kind,category,description,
+            cursor = con.execute("""INSERT INTO movements(id,date,account,kind,category,description,
              amount_minor,currency,reference,property,treatment,source_file,source_sheet,source_row,source_hash,dedup_key,proposal_id,created_at)
-             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
+             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(dedup_key) DO NOTHING""", (
                 str(uuid.uuid4()), r["date"], r["account"], r["kind"], r["category"], r["description"],
                 r["amount_minor"], "MXN", r.get("reference"), r.get("property"), r["treatment"],
                 r.get("source_file"), r.get("source_sheet"), r.get("source_row"), r.get("source_hash"),
@@ -269,7 +273,7 @@ def existing_keys():
         return {r[0] for r in con.execute("SELECT dedup_key FROM movements WHERE dedup_key IS NOT NULL")}
 
 
-def validate_manual(data):
+def validate_manual(data, categories=None):
     d = date.fromisoformat(data["date"])
     if data["account"] not in {a["id"] for a in ACCOUNTS}:
         raise ValueError("Elige una cuenta válida")
@@ -284,7 +288,7 @@ def validate_manual(data):
     if not data["description"].strip() or not data["category"].strip():
         raise ValueError("Descripción y categoría son obligatorias")
     category = data["category"].strip()
-    if category not in metadata()["categories"]:
+    if category not in (categories if categories is not None else metadata()["categories"]):
         raise ValueError("Selecciona una categoría del catálogo")
     negative = kind in {"egreso", "cargo", "interes", "comision"}
     return {"date": d.isoformat(), "account": data["account"], "kind": kind,
@@ -293,3 +297,34 @@ def validate_manual(data):
         "reference": data.get("reference"), "property": data.get("property"),
         "treatment": treatment(category, kind), "source_file": "Registro manual", "source_sheet": None,
         "source_row": None, "source_hash": None, "dedup_key": None}
+
+
+def correct_import(pid, sheet, row_number, data, reason):
+    from .importer import refresh_preview
+    if not reason.strip():
+        raise ValueError("Explica el motivo de la corrección")
+    with connection() as con:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute("SELECT * FROM proposals WHERE id=?", (pid,)).fetchone()
+        if not row:
+            raise KeyError("Propuesta no encontrada")
+        if row["kind"] != "import" or row["status"] != "pending":
+            raise ValueError("Solo se corrigen importaciones pendientes")
+        payload = json.loads(row["payload"])
+        original = next((e for e in payload["errors"] if e["sheet"] == sheet and e["row"] == row_number), None)
+        if not original:
+            raise ValueError("La fila ya fue corregida o no tiene errores")
+        if original.get("draft", {}).get("account") != data["account"]:
+            raise ValueError("La cuenta debe corresponder a la hoja de origen")
+        movement = validate_manual(data, payload["categories"] + ["Por revisar"])
+        movement.update(source_file=payload["filename"], source_sheet=sheet, source_row=row_number,
+            source_hash=payload["file_hash"])
+        payload["movements"].append(movement)
+        payload["errors"] = [e for e in payload["errors"] if e is not original]
+        payload.setdefault("corrections", []).append({"sheet": sheet, "row": row_number, "before": original,
+            "after": movement.copy(), "reason": reason.strip(), "created_at": now()})
+        refresh_preview(payload)
+        con.execute("UPDATE proposals SET payload=? WHERE id=?", (json.dumps(payload, ensure_ascii=False), pid))
+        con.execute("INSERT INTO audit(action,proposal_id,details,created_at) VALUES('correct_proposal',?,?,?)",
+            (pid, json.dumps({"sheet": sheet, "row": row_number, "reason": reason.strip()}, ensure_ascii=False), now()))
+    return get_proposal(pid)

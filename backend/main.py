@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 import asyncio
 import io
-import json
 import os
 from typing import Literal
 
@@ -24,6 +23,9 @@ load_dotenv(ROOT / ".env.local", override=False)
 @asynccontextmanager
 async def lifespan(app):
     ledger.init_db()
+    if ledger.demo_mode():
+        from .demo_data import seed
+        seed()
     yield
 
 
@@ -55,6 +57,13 @@ class Chat(BaseModel):
     history: list[dict[str, str]] = Field(default_factory=list, max_length=10)
 
 
+class ImportCorrection(BaseModel):
+    sheet: str = Field(max_length=100)
+    row: int = Field(gt=3)
+    movement: Manual
+    reason: str = Field(min_length=1, max_length=1000)
+
+
 @app.exception_handler(ValueError)
 async def value_error(request, exc):
     from fastapi.responses import JSONResponse
@@ -69,12 +78,12 @@ async def key_error(request, exc):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "ai_configured": bool(os.environ.get("OPENAI_API_KEY", "").strip()), "model": os.environ.get("OPENAI_MODEL", "gpt-5.4-mini")}
+    return {"status": "ok", "ai_configured": bool(os.environ.get("OPENAI_API_KEY", "").strip()), "model": os.environ.get("OPENAI_MODEL", "gpt-5.4-mini"), "demo_mode": ledger.demo_mode()}
 
 
 @app.get("/api/meta")
 def meta():
-    return {**ledger.metadata(), "local_workbook_available": (ROOT.parent / "Balance V6.11.xlsx").is_file()}
+    return {**ledger.metadata(), "local_workbook_available": ledger.demo_mode(), "demo_mode": ledger.demo_mode(), "company_name": "Empresa Demo" if ledger.demo_mode() else "Mi empresa"}
 
 
 @app.get("/api/summary")
@@ -102,6 +111,8 @@ def movement(mid: str):
 
 @app.post("/api/imports/preview")
 async def preview(file: UploadFile = File(...)):
+    if ledger.demo_mode():
+        raise ValueError("La demostración solo utiliza datos ficticios. Usa Cargar ejemplo ficticio; no subas documentos reales.")
     if not str(file.filename).lower().endswith(".xlsx"):
         raise ValueError("Selecciona un archivo .xlsx")
     content = await file.read(15 * 1024 * 1024 + 1)
@@ -111,10 +122,10 @@ async def preview(file: UploadFile = File(...)):
 
 @app.post("/api/imports/local-preview")
 def local_preview():
-    path = ROOT.parent / "Balance V6.11.xlsx"
-    if not path.is_file():
-        raise KeyError("No se encontró el Excel de trabajo; súbelo desde tu equipo")
-    return ledger.add_proposal("import", parse_workbook(path.read_bytes(), path.name))
+    if not ledger.demo_mode():
+        raise KeyError("Selecciona explícitamente el archivo XLSX que quieras importar")
+    from .demo_data import payload
+    return ledger.add_proposal("import", payload())
 
 
 @app.get("/api/proposals")
@@ -136,6 +147,11 @@ def proposal(pid: str):
 @app.post("/api/proposals/{pid}/confirm")
 def confirm(pid: str, body: Confirmation):
     return ledger.confirm_proposal(pid)
+
+
+@app.post("/api/proposals/{pid}/corrections")
+def correct_import(pid: str, body: ImportCorrection):
+    return ledger.correct_import(pid, body.sheet, body.row, body.movement.model_dump(), body.reason)
 
 
 @app.post("/api/proposals/{pid}/reject")

@@ -12,17 +12,18 @@ Negativo reduce efectivo/posición neta; positivo lo aumenta. Un cargo de tarjet
 
 | Método y ruta | Uso |
 |---|---|
-| `GET /health` | `{status, ai_configured, model}` sin secretos |
+| `GET /health` | `{status, ai_configured, model, demo_mode}` sin secretos |
 | `GET /api/meta` | Cuentas, categorías, meses, conteo confirmado y pendiente |
 | `GET /api/summary?month=2026-10&account=banco` | Totales, saldos por cuenta, series diarias, categorías y últimos registros |
 | `GET /api/movements` | Filtros opcionales `month`, `account`, `category`, `search`, `ids` (separados por coma), `page`, `size` (máx. 100). Devuelve `{items,total,page,size,totals}` |
 | `GET /api/movements/{id}` | Detalle y procedencia |
 | `POST /api/imports/preview` | Multipart con campo `file` XLSX. Devuelve propuesta pendiente |
-| `POST /api/imports/local-preview` | Vista previa del libro local disponible; acceso solo local |
+| `POST /api/imports/local-preview` | Vista previa del dataset ficticio; no abre archivos personales y solo está disponible en modo demo |
 | `GET /api/proposals` | Propuestas pendientes |
 | `GET /api/proposals/{id}` | Estado y contenido actualizado de una propuesta |
 | `POST /api/proposals/manual` | Prepara un movimiento; nunca lo confirma |
 | `POST /api/proposals/{id}/confirm` | Body `{ "confirm": true }`. Devuelve `{inserted,duplicates,already_confirmed}` |
+| `POST /api/proposals/{id}/corrections` | `{sheet,row,movement,reason}`; corrige una fila inválida solo en la propuesta pendiente y conserva la trazabilidad |
 | `POST /api/proposals/{id}/reject` | Body `{ "confirm": true }` |
 | `POST /api/chat` | `{message, mode: "analyst" | "capture", month, account, history}` |
 | `GET /api/export?month=2026-10` | CSV de los movimientos confirmados del filtro |
